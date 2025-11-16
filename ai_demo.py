@@ -7,14 +7,16 @@ This script lets you watch different AI agents play the game.
 from game.ui import MinesweeperUI
 from game.minesweeper import Difficulty
 from ai.agent import MinesweeperAgent, RandomAgent
+from ai.pattern_agent import PatternAgent
 
 def main():
     print("="*60)
     print("MINESWEEPER AI DEMO")
     print("="*60)
     print("\nChoose AI Agent:")
-    print("1. Smart Agent (Rule-based logic)")
-    print("2. Random Agent (Baseline - just random clicks)")
+    print("1. Pattern Agent (Advanced - uses 1-2-1, 1-1, etc.)")
+    print("2. Smart Agent (Basic rule-based logic)")
+    print("3. Random Agent (Baseline - just random clicks)")
     print("\nChoose Difficulty:")
     print("a. Beginner (8x8, 10 mines)")
     print("b. Intermediate (16x16, 40 mines)")
@@ -22,7 +24,7 @@ def main():
     print("\n" + "="*60)
     
     # Get agent choice
-    agent_choice = input("\nSelect agent (1 or 2) [default: 1]: ").strip() or "1"
+    agent_choice = input("\nSelect agent (1, 2, or 3) [default: 1]: ").strip() or "1"
     
     # Get difficulty
     diff_choice = input("Select difficulty (a, b, or c) [default: a]: ").strip().lower() or "a"
@@ -50,6 +52,7 @@ def main():
     print("Controls during game:")
     print("  SPACE: Pause/Resume")
     print("  R: Manual restart")
+    print("  L: View leaderboard")
     print("  ESC: Quit")
     print("="*60 + "\n")
     
@@ -57,12 +60,15 @@ def main():
     ui = MinesweeperUI(difficulty)
     
     # Create agent
-    if agent_choice == "2":
+    if agent_choice == "3":
         print("🤖 Using Random Agent (baseline)")
         agent = RandomAgent(ui.game)
-    else:
-        print("🧠 Using Smart Agent (rule-based)")
+    elif agent_choice == "2":
+        print("🧠 Using Smart Agent (basic rules)")
         agent = MinesweeperAgent(ui.game)
+    else:
+        print("🎯 Using Pattern Agent (advanced patterns)")
+        agent = PatternAgent(ui.game)
     
     # Run with AI
     ui.run_with_ai(

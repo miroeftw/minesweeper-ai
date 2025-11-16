@@ -1,6 +1,7 @@
 import pygame
 import time
 from game.minesweeper import Minesweeper, CellState, GameState, Difficulty
+from game.leaderboard import Leaderboard
 
 # Colors (GNOME Mines inspired)
 COLORS = {
@@ -38,6 +39,7 @@ class MinesweeperUI:
         
         self.game = Minesweeper(difficulty)
         self.current_difficulty = difficulty
+        self.leaderboard = Leaderboard()
         
         # UI Constants
         self.cell_size = 32
@@ -62,6 +64,7 @@ class MinesweeperUI:
         # Timer
         self.start_time = None
         self.elapsed_time = 0
+        self.game_completed = False
         
         # Smiley button
         self.smiley_rect = pygame.Rect(
@@ -70,6 +73,9 @@ class MinesweeperUI:
             50,
             50
         )
+        
+        # Leaderboard display
+        self.show_leaderboard = False
         
         self.running = True
         self.clock = pygame.time.Clock()
@@ -233,8 +239,21 @@ class MinesweeperUI:
         elif self.game.game_state == GameState.READY:
             self.elapsed_time = 0
             self.start_time = None
+        elif self.game.game_state == GameState.WON and not self.game_completed:
+            # Game just won - save to leaderboard
+            self.game_completed = True
+            position = self.leaderboard.add_entry(self.current_difficulty, self.elapsed_time)
+            if position and position <= 10:
+                print(f"🏆 NEW HIGH SCORE! Rank #{position} - Time: {self.elapsed_time}s")
         
         self.draw_counter(self.window_width - 100, 20, min(999, self.elapsed_time))
+        
+        # Best time indicator
+        best_time = self.leaderboard.get_best_time(self.current_difficulty)
+        if best_time < 999:
+            best_text = f"Best: {best_time}s"
+            best_surface = self.font_small.render(best_text, True, COLORS['text'])
+            self.screen.blit(best_surface, (self.window_width - 100, 65))
         
         # Smiley button (center)
         self.draw_smiley()
@@ -255,6 +274,78 @@ class MinesweeperUI:
             return row, col
         return None
     
+    def draw_leaderboard_overlay(self):
+        """Draw leaderboard overlay"""
+        # Semi-transparent background
+        overlay = pygame.Surface((self.window_width, self.window_height))
+        overlay.set_alpha(220)
+        overlay.fill((40, 40, 40))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Leaderboard box
+        box_width = min(500, self.window_width - 40)
+        box_height = min(600, self.window_height - 40)
+        box_x = (self.window_width - box_width) // 2
+        box_y = (self.window_height - box_height) // 2
+        
+        pygame.draw.rect(self.screen, (200, 200, 200), 
+                        (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, (100, 100, 100), 
+                        (box_x, box_y, box_width, box_height), 3)
+        
+        # Title
+        title = self.font_large.render("🏆 LEADERBOARD 🏆", True, (0, 0, 0))
+        title_rect = title.get_rect(center=(self.window_width // 2, box_y + 30))
+        self.screen.blit(title, title_rect)
+        
+        # Draw tabs for difficulties
+        tab_width = box_width // 3
+        tab_height = 40
+        tab_y = box_y + 70
+        
+        difficulties = [Difficulty.BEGINNER, Difficulty.INTERMEDIATE, Difficulty.EXPERT]
+        tab_names = ["Beginner", "Intermediate", "Expert"]
+        
+        for i, (diff, name) in enumerate(zip(difficulties, tab_names)):
+            tab_x = box_x + i * tab_width
+            color = (150, 150, 255) if diff == self.current_difficulty else (180, 180, 180)
+            pygame.draw.rect(self.screen, color, (tab_x, tab_y, tab_width, tab_height))
+            pygame.draw.rect(self.screen, (100, 100, 100), (tab_x, tab_y, tab_width, tab_height), 2)
+            
+            text = self.font_small.render(name, True, (0, 0, 0))
+            text_rect = text.get_rect(center=(tab_x + tab_width // 2, tab_y + tab_height // 2))
+            self.screen.blit(text, text_rect)
+        
+        # Draw entries for current difficulty
+        entries = self.leaderboard.get_top_entries(self.current_difficulty, 10)
+        entry_y = tab_y + tab_height + 20
+        
+        if entries:
+            for i, entry in enumerate(entries, 1):
+                # Rank
+                rank_text = self.font_medium.render(f"{i}.", True, (0, 0, 0))
+                self.screen.blit(rank_text, (box_x + 20, entry_y))
+                
+                # Time
+                time_text = self.font_medium.render(f"{entry.time}s", True, (0, 100, 0))
+                self.screen.blit(time_text, (box_x + 60, entry_y))
+                
+                # Date
+                date_text = self.font_small.render(entry.date, True, (80, 80, 80))
+                self.screen.blit(date_text, (box_x + 200, entry_y + 5))
+                
+                entry_y += 45
+        else:
+            no_entries = self.font_medium.render("No entries yet!", True, (100, 100, 100))
+            no_entries_rect = no_entries.get_rect(center=(self.window_width // 2, entry_y + 100))
+            self.screen.blit(no_entries, no_entries_rect)
+        
+        # Instructions
+        instruction = self.font_small.render("Press L to close | 1/2/3 to change difficulty", True, (255, 255, 255))
+        instruction_rect = instruction.get_rect(center=(self.window_width // 2, box_y + box_height - 20))
+        overlay.blit(instruction, (instruction_rect.x, instruction_rect.y - box_y))
+        self.screen.blit(instruction, instruction_rect)
+    
     def handle_click(self, pos, button):
         """Handle mouse click"""
         # Check smiley button
@@ -262,6 +353,7 @@ class MinesweeperUI:
             self.game.reset(self.current_difficulty)
             self.start_time = None
             self.elapsed_time = 0
+            self.game_completed = False
             return
         
         # Check board click
@@ -279,11 +371,14 @@ class MinesweeperUI:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
+                elif event.type == pygame.MOUSEBUTTONDOWN and not self.show_leaderboard:
                     self.handle_click(event.pos, event.button)
                 elif event.type == pygame.KEYDOWN:
+                    # Leaderboard toggle
+                    if event.key == pygame.K_l:
+                        self.show_leaderboard = not self.show_leaderboard
                     # Keyboard shortcuts for difficulty
-                    if event.key == pygame.K_1:
+                    elif event.key == pygame.K_1:
                         self.change_difficulty(Difficulty.BEGINNER)
                     elif event.key == pygame.K_2:
                         self.change_difficulty(Difficulty.INTERMEDIATE)
@@ -294,6 +389,10 @@ class MinesweeperUI:
             self.screen.fill(COLORS['bg'])
             self.draw_header()
             self.draw_board()
+            
+            # Draw leaderboard overlay if active
+            if self.show_leaderboard:
+                self.draw_leaderboard_overlay()
             
             pygame.display.flip()
             self.clock.tick(60)
