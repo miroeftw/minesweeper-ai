@@ -322,3 +322,139 @@ class MinesweeperUI:
             50,
             50
         )
+    
+    def run_with_ai(self, agent, delay_ms=200, auto_restart=False, max_games=1):
+        """
+        Run the game with an AI agent playing
+        
+        Args:
+            agent: AI agent instance
+            delay_ms: Delay between moves in milliseconds
+            auto_restart: Whether to automatically restart after game ends
+            max_games: Maximum number of games to play (0 = infinite)
+        """
+        games_played = 0
+        games_won = 0
+        games_lost = 0
+        
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        # Pause/unpause
+                        print("Paused. Press SPACE to continue, ESC to quit.")
+                        paused = True
+                        while paused:
+                            for e in pygame.event.get():
+                                if e.type == pygame.QUIT:
+                                    self.running = False
+                                    paused = False
+                                elif e.type == pygame.KEYDOWN:
+                                    if e.key == pygame.K_SPACE:
+                                        paused = False
+                                    elif e.key == pygame.K_ESCAPE:
+                                        self.running = False
+                                        paused = False
+                    elif event.key == pygame.K_r:
+                        # Manual restart
+                        self.game.reset(self.current_difficulty)
+                        self.start_time = None
+                        self.elapsed_time = 0
+                        agent.game = self.game
+            
+            # Draw current state
+            self.screen.fill(COLORS['bg'])
+            self.draw_header()
+            self.draw_board()
+            
+            # Draw AI info
+            stats = agent.calculate_statistics()
+            info_text = f"Games: {games_played} | Won: {games_won} | Lost: {games_lost} | Progress: {stats['progress']:.1f}%"
+            text_surface = self.font_small.render(info_text, True, COLORS['text'])
+            self.screen.blit(text_surface, (10, self.window_height - 25))
+            
+            controls_text = "SPACE: Pause | R: Restart | ESC: Quit"
+            controls_surface = self.font_small.render(controls_text, True, COLORS['text'])
+            self.screen.blit(controls_surface, (10, self.window_height - 50))
+            
+            pygame.display.flip()
+            
+            # AI makes a move
+            if self.game.game_state == GameState.PLAYING or self.game.game_state == GameState.READY:
+                action = agent.choose_action()
+                
+                if action:
+                    action_type, row, col = action
+                    
+                    if action_type == 'reveal':
+                        self.game.reveal_cell(row, col)
+                    elif action_type == 'flag':
+                        self.game.toggle_flag(row, col)
+                    
+                    # Wait before next move
+                    pygame.time.delay(delay_ms)
+                else:
+                    # No valid action, game might be stuck
+                    print("Agent has no valid moves!")
+                    pygame.time.delay(2000)
+                    if auto_restart:
+                        self.game.reset(self.current_difficulty)
+                        self.start_time = None
+                        self.elapsed_time = 0
+                        agent.game = self.game
+            
+            elif self.game.game_state in [GameState.WON, GameState.LOST]:
+                # Game ended
+                games_played += 1
+                if self.game.game_state == GameState.WON:
+                    games_won += 1
+                    print(f"🎉 AI WON game #{games_played}! Time: {self.elapsed_time}s")
+                else:
+                    games_lost += 1
+                    print(f"💥 AI LOST game #{games_played}")
+                
+                # Show result for a moment
+                pygame.time.delay(2000)
+                
+                # Check if we should continue
+                if max_games > 0 and games_played >= max_games:
+                    print(f"\nCompleted {games_played} games!")
+                    print(f"Win rate: {games_won/games_played*100:.1f}%")
+                    self.running = False
+                elif auto_restart:
+                    self.game.reset(self.current_difficulty)
+                    self.start_time = None
+                    self.elapsed_time = 0
+                    agent.game = self.game
+                else:
+                    # Wait for user to restart or quit
+                    waiting = True
+                    while waiting and self.running:
+                        for e in pygame.event.get():
+                            if e.type == pygame.QUIT:
+                                self.running = False
+                                waiting = False
+                            elif e.type == pygame.KEYDOWN:
+                                if e.key == pygame.K_r:
+                                    self.game.reset(self.current_difficulty)
+                                    self.start_time = None
+                                    self.elapsed_time = 0
+                                    agent.game = self.game
+                                    waiting = False
+            
+            self.clock.tick(60)
+        
+        pygame.quit()
+        
+        # Print final statistics
+        if games_played > 0:
+            print("\n" + "="*50)
+            print("FINAL STATISTICS")
+            print("="*50)
+            print(f"Games played: {games_played}")
+            print(f"Games won: {games_won}")
+            print(f"Games lost: {games_lost}")
+            print(f"Win rate: {games_won/games_played*100:.1f}%")
+            print("="*50)
